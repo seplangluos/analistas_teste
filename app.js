@@ -62,6 +62,7 @@ const USER_EMAIL_MAPPING = {
   "Marcella": "marcella@hotmail.com",
   "Lúcia": "lucia@hotmail.com",
   "Fernanda": "fernanda@hotmail.com",
+  "Andre": "andre@hotmail.com",
   "Admin": "seplan.gluos@valadares.mg.gov.br"
 };
 
@@ -77,7 +78,7 @@ function emailToUsername(email) {
 
 // Dados da aplicação
 const GLUOS_DATA = {
-  usuarios: ["Pedro", "Rogério", "Isadora", "Andreza", "Hélica", "Juliana", "Frederico", "Gabriella", "Renata", "Ana Luiza", "Maysa", "Marcella", "Lúcia", "Fernanda", "Admin"],
+  usuarios: ["Pedro", "Rogério", "Isadora", "Andreza", "Hélica", "Juliana", "Frederico", "Gabriella", "Renata", "Ana Luiza", "Maysa", "Marcella", "Lúcia", "Fernanda", "Andre", "Admin"],
   assuntos: [
     {id: 1, texto: "Deferimento de Processo"},
     {id: 2, texto: "Notificação de processo"},
@@ -246,7 +247,8 @@ function setupMainNavigation() {
     { id: 'search-btn', screen: 'search' },
     { id: 'database-btn', screen: 'database', callback: loadDatabaseTable },
     { id: 'profile-btn', callback: showProfileModal },
-    { id: 'report-btn', screen: 'report' }
+    { id: 'report-btn', screen: 'report' },
+    { id: 'prazos-btn', screen: 'prazos', callback: initPrazosScreen }
   ];
   
   navButtons.forEach(btn => {
@@ -262,7 +264,8 @@ function setupMainNavigation() {
   const backButtons = [
     'back-to-dashboard-1', 'back-to-dashboard-3', 
     'back-to-dashboard-4', 'back-to-dashboard-5',
-    'back-to-dashboard-6', 'back-to-dashboard-7'
+    'back-to-dashboard-6', 'back-to-dashboard-7',
+    'back-to-dashboard-prazos'
   ];
   
   backButtons.forEach(btnId => {
@@ -968,7 +971,7 @@ function displaySearchResults(entries) {
     tableBody.innerHTML = '';
     
     if (entries.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="8" class="text-center">Nenhum resultado encontrado.</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="10" class="text-center">Nenhum resultado encontrado.</td></tr>`;
     } else {
         entries.forEach(entry => {
             const row = document.createElement('tr');
@@ -978,8 +981,10 @@ function displaySearchResults(entries) {
                 <td>${entry.server || '-'}</td>
                 <td>${entry.processNumber || '-'}</td>
                 <td title="${entry.subjectText || '-'}">${truncateText(entry.subjectText || '-', 30)}</td>
+                <td title="${entry.assuntoProcesso || '-'}">${truncateText(entry.assuntoProcesso || '-', 30)}</td>
                 <td>${entry.contributor || '-'}</td>
                 <td>${entry.ctm || '-'}</td>
+                <td>${entry.prazo || '-'}</td>
                 <td title="${entry.observation || '-'}">${truncateText(entry.observation || '-', 40)}</td>
             `;
             tableBody.appendChild(row);
@@ -1011,7 +1016,7 @@ function loadDatabaseTable(entries = null) {
 
     if (entriesToShow.length === 0) {
         const tableBody = document.querySelector('#database-table tbody');
-        if (tableBody) tableBody.innerHTML = `<tr><td colspan="9" class="text-center">Nenhum registro encontrado.</td></tr>`;
+        if (tableBody) tableBody.innerHTML = `<tr><td colspan="11" class="text-center">Nenhum registro encontrado.</td></tr>`;
         hidePaginationControls();
         return;
     }
@@ -1076,8 +1081,10 @@ function displayCurrentPage() {
             <td>${entry.server || '-'}</td>
             <td>${entry.processNumber || '-'}</td>
             <td title="${entry.subjectText || '-'}">${truncateText(entry.subjectText || '-', 30)}</td>
+            <td title="${entry.assuntoProcesso || '-'}">${truncateText(entry.assuntoProcesso || '-', 30)}</td>
             <td>${entry.contributor || '-'}</td>
             <td>${entry.ctm || '-'}</td>
+            <td>${entry.prazo || '-'}</td>
             <td title="${entry.observation || '-'}">${truncateText(entry.observation || '-', 40)}</td>
             <td>${actionsHtml}</td>
         `;
@@ -1674,4 +1681,209 @@ function setButtonLoading(button, loading) {
     if (!button) return;
     if (loading) { button.classList.add('loading'); button.disabled = true; } 
     else { button.classList.remove('loading'); button.disabled = false; }
+}
+
+
+// --- LÓGICA DO NOVO MENU: PRAZOS ---
+let currentPrazosSort = { column: 'diasFim', direction: 'desc' };
+let allOverdueList = [];
+let filteredOverdueList = [];
+
+function initPrazosScreen() {
+    const serverSelect = document.getElementById('prazos-filter-server');
+    if (serverSelect) {
+        serverSelect.innerHTML = '<option value="">Todos</option>';
+        GLUOS_DATA.usuarios.forEach(user => {
+            serverSelect.innerHTML += `<option value="${user}">${user}</option>`;
+        });
+    }
+    
+    calculatePrazos();
+    
+    const tipoSelect = document.getElementById('prazos-filter-tipo');
+    if (tipoSelect) {
+        tipoSelect.innerHTML = '<option value="">Todos</option>';
+        const tipos = [...new Set(allOverdueList.map(item => item.assuntoProcesso).filter(Boolean))].sort();
+        tipos.forEach(tipo => {
+            tipoSelect.innerHTML += `<option value="${tipo}">${tipo}</option>`;
+        });
+    }
+
+    setupPrazosEventListeners();
+    renderPrazosTable();
+}
+
+function calculatePrazos() {
+    const processosMap = new Map();
+    // Agrupa todas as entradas pelo numero do processo
+    allEntries.forEach(entry => {
+        if(!processosMap.has(entry.processNumber)) processosMap.set(entry.processNumber, []);
+        processosMap.get(entry.processNumber).push(entry);
+    });
+
+    allOverdueList = [];
+    const now = new Date();
+
+    processosMap.forEach((entries, processNumber) => {
+        // Ordena por data (cronológico)
+        entries.sort((a, b) => a.timestamp - b.timestamp);
+        
+        // Encontra notificações do processo
+        const notificacoes = entries.filter(e => e.subjectId === 2); // 2 = Notificação de processo
+        if (notificacoes.length === 0) return;
+
+        // Pega a última notificação
+        const lastNotificacao = notificacoes[notificacoes.length - 1];
+        
+        // Verifica se há deferimento (1) ou indeferimento (6) depois desta notificação
+        const hasFinalizationAfter = entries.some(e => 
+            (e.subjectId === 1 || e.subjectId === 6) && e.timestamp > lastNotificacao.timestamp
+        );
+        
+        if (hasFinalizationAfter) return;
+
+        // Calcula o prazo em dias (se não foi preenchido, usa 90 por padrão)
+        const prazoDias = lastNotificacao.prazo ? parseInt(lastNotificacao.prazo) : 90;
+        
+        const [day, month, year] = lastNotificacao.date.split('/');
+        const notifDate = new Date(`${year}-${month}-${day}T00:00:00`);
+        
+        const diaFinal = new Date(notifDate);
+        diaFinal.setDate(diaFinal.getDate() + prazoDias);
+
+        // Calcula os dias passados desde a data final calculada
+        const diffTime = now.getTime() - diaFinal.getTime();
+        const diasFim = Math.floor(diffTime / (1000 * 3600 * 24));
+
+        // Só considera vencido/atrasado se passou do dia
+        if (diasFim > 0) {
+            allOverdueList.push({
+                ...lastNotificacao,
+                diaFinal: diaFinal.toLocaleDateString('pt-BR'),
+                diasFim: diasFim,
+                diaFinalObj: diaFinal
+            });
+        }
+    });
+
+    filteredOverdueList = [...allOverdueList];
+    sortPrazosData();
+}
+
+function setupPrazosEventListeners() {
+    const applyBtn = document.getElementById('apply-prazos-filters');
+    const clearBtn = document.getElementById('clear-prazos-filters');
+    
+    if (applyBtn) {
+        applyBtn.removeEventListener('click', applyPrazosFilters);
+        applyBtn.addEventListener('click', applyPrazosFilters);
+    }
+    if (clearBtn) {
+        clearBtn.removeEventListener('click', clearPrazosFilters);
+        clearBtn.addEventListener('click', clearPrazosFilters);
+    }
+
+    document.querySelectorAll('#prazos-table th.sortable').forEach(th => {
+        th.removeEventListener('click', handlePrazosSort);
+        th.addEventListener('click', handlePrazosSort);
+    });
+}
+
+function handlePrazosSort(e) {
+    const column = e.target.getAttribute('data-sort');
+    if (currentPrazosSort.column === column) {
+        currentPrazosSort.direction = currentPrazosSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentPrazosSort.column = column;
+        currentPrazosSort.direction = column === 'diasFim' ? 'desc' : 'asc';
+    }
+    sortPrazosData();
+    renderPrazosTable();
+}
+
+function sortPrazosData() {
+    filteredOverdueList.sort((a, b) => {
+        let valA = a[currentPrazosSort.column];
+        let valB = b[currentPrazosSort.column];
+
+        // Lidar com campos de data/número nativos de forma apropriada
+        if (currentPrazosSort.column === 'diaFinal') {
+            valA = a.diaFinalObj.getTime();
+            valB = b.diaFinalObj.getTime();
+        } else if (currentPrazosSort.column === 'date') {
+            const [dA, mA, yA] = a.date.split('/');
+            const [dB, mB, yB] = b.date.split('/');
+            valA = new Date(`${yA}-${mA}-${dA}`).getTime();
+            valB = new Date(`${yB}-${mB}-${dB}`).getTime();
+        } else if (currentPrazosSort.column === 'prazo' || currentPrazosSort.column === 'diasFim') {
+            valA = parseInt(valA) || 0;
+            valB = parseInt(valB) || 0;
+        } else {
+            valA = valA ? valA.toString().toLowerCase() : '';
+            valB = valB ? valB.toString().toLowerCase() : '';
+        }
+
+        if (valA < valB) return currentPrazosSort.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return currentPrazosSort.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+}
+
+function applyPrazosFilters() {
+    const server = document.getElementById('prazos-filter-server').value;
+    const tipo = document.getElementById('prazos-filter-tipo').value;
+    const dataFinal = document.getElementById('prazos-filter-data').value;
+
+    filteredOverdueList = allOverdueList.filter(item => {
+        let match = true;
+        if (server && item.server !== server) match = false;
+        if (tipo && item.assuntoProcesso !== tipo) match = false;
+        if (dataFinal) {
+            const [y, m, d] = dataFinal.split('-');
+            const filterDateStr = `${d}/${m}/${y}`;
+            if (item.diaFinal !== filterDateStr) match = false;
+        }
+        return match;
+    });
+
+    sortPrazosData();
+    renderPrazosTable();
+}
+
+function clearPrazosFilters() {
+    document.getElementById('prazos-filter-server').value = '';
+    document.getElementById('prazos-filter-tipo').value = '';
+    document.getElementById('prazos-filter-data').value = '';
+    filteredOverdueList = [...allOverdueList];
+    sortPrazosData();
+    renderPrazosTable();
+}
+
+function renderPrazosTable() {
+    const tbody = document.querySelector('#prazos-table tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if (filteredOverdueList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center">Nenhum processo em atraso encontrado.</td></tr>';
+        return;
+    }
+
+    filteredOverdueList.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${item.date}</td>
+            <td>${item.server}</td>
+            <td>${item.processNumber}</td>
+            <td>${item.subjectText}</td>
+            <td>${item.assuntoProcesso || '-'}</td>
+            <td>${item.contributor || '-'}</td>
+            <td>${item.ctm || '-'}</td>
+            <td>${item.prazo || '90'}</td>
+            <td>${item.diaFinal}</td>
+            <td style="color: var(--color-error); font-weight: bold;">${item.diasFim}</td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
