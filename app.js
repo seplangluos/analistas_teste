@@ -59,12 +59,13 @@ const USER_EMAIL_MAPPING = {
   "Andre": "andre@hotmail.com",
   "Matheus": "matheusamanciocosta@hotmail.com",
   "Admin": "seplan.gluos@valadares.mg.gov.br",
-  "Teste": "teste@hotmail.com"
+  "Teste": "teste@valadares.mg.gov.br"
+
 };
 
 // =========================================================================
-// CONTROLE DE ACESSO AO RELATÓRIO COMPLETO
-// Adicione aqui os nomes exatos dos usuários que podem ver o Relatório Completo
+// CONTROLE DE ACESSO GERAL (RELATÓRIO COMPLETO + BASE DE DADOS COMPLETA)
+// Adicione aqui os nomes exatos dos usuários que podem ver tudo
 // =========================================================================
 const COMPLETE_REPORT_ALLOWED_USERS = [
   "Admin",
@@ -203,6 +204,12 @@ async function loadAllEntries() {
         allEntries = [];
       }
       updateRecordCount();
+
+      // Se a tela da Base de Dados estiver aberta, atualiza a tabela em tempo real respeitando a permissão
+      const databaseScreen = document.getElementById('database-screen');
+      if (databaseScreen && databaseScreen.classList.contains('active')) {
+        applyDatabaseFilters();
+      }
     });
   } catch (error) {
     console.error('Erro ao carregar entradas:', error);
@@ -346,6 +353,7 @@ async function handleLogin(e) {
     
     currentUser = user; 
     updateUserInfo();
+    configureDatabasePermissions();
 
     userSelect.value = '';
     passwordInput.value = '';
@@ -382,6 +390,7 @@ function showLoginError(message) {
 function handleLogout() {
   currentUser = null;
   updateUserInfo();
+  configureDatabasePermissions();
   
   // Esconde a sidebar e retira padding
   document.getElementById('sidebar').classList.add('hidden');
@@ -1064,8 +1073,32 @@ function setupDatabase() {
     setupPaginationEventListeners();
 }
 
+// Configura o filtro de servidor na Base de Dados conforme a permissão do usuário
+function configureDatabasePermissions() {
+    const filterServer = document.getElementById('filter-server');
+    if (!filterServer) return;
+
+    if (!hasCompleteReportAccess() && currentUser) {
+        filterServer.value = currentUser;
+        filterServer.disabled = true;
+    } else {
+        filterServer.disabled = false;
+        filterServer.value = '';
+    }
+}
+
+// Retorna apenas as entradas que o usuário atual tem permissão de visualizar na Base de Dados
+function getPermittedDatabaseEntries() {
+    if (hasCompleteReportAccess()) {
+        return [...allEntries];
+    }
+    return allEntries.filter(entry => entry.server === currentUser);
+}
+
 function loadDatabaseTable(entries = null) {
-    const entriesToShow = entries || allEntries;
+    configureDatabasePermissions();
+    const baseEntries = getPermittedDatabaseEntries();
+    const entriesToShow = entries !== null ? entries : baseEntries;
 
     const totalRecords = document.getElementById('total-records');
     if (totalRecords) totalRecords.textContent = `${entriesToShow.length} registro(s)`;
@@ -1084,9 +1117,12 @@ function applyDatabaseFilters() {
     const subjectFilter = document.getElementById('filter-subject').value;
     const dateFilter = document.getElementById('filter-date').value;
     
-    let filteredEntries = [...allEntries];
+    // Parte sempre das entradas permitidas para o usuário logado
+    let filteredEntries = getPermittedDatabaseEntries();
     
-    if (serverFilter) filteredEntries = filteredEntries.filter(entry => entry.server === serverFilter);
+    if (hasCompleteReportAccess() && serverFilter) {
+        filteredEntries = filteredEntries.filter(entry => entry.server === serverFilter);
+    }
     if (subjectFilter) filteredEntries = filteredEntries.filter(entry => entry.subjectId === parseInt(subjectFilter));
     if (dateFilter) {
         const targetDate = new Date(dateFilter + 'T00:00:00').toLocaleDateString('pt-BR');
@@ -1096,7 +1132,11 @@ function applyDatabaseFilters() {
 }
 
 function clearDatabaseFilters() {
-    document.getElementById('filter-server').value = '';
+    if (hasCompleteReportAccess()) {
+        document.getElementById('filter-server').value = '';
+    } else if (currentUser) {
+        document.getElementById('filter-server').value = currentUser;
+    }
     document.getElementById('filter-subject').value = '';
     document.getElementById('filter-date').value = '';
     loadDatabaseTable();
@@ -1123,7 +1163,7 @@ function displayCurrentPage() {
 
     pageEntries.forEach(entry => {
         const row = document.createElement('tr');
-        const canEdit = entry.server === currentUser || currentUser === "Admin";
+        const canEdit = entry.server === currentUser || hasCompleteReportAccess();
         const actionsHtml = canEdit ? `
             <div class="action-buttons">
                 <button class="btn--edit" onclick="editEntry('${entry.id}')">Editar</button>
@@ -1271,7 +1311,7 @@ window.editEntry = function(entryId) {
     const entry = allEntries.find(e => e.id === entryId);
     if (!entry) return alert('Entrada não encontrada.');
     
-    if (entry.server !== currentUser && currentUser !== "Admin") {
+    if (entry.server !== currentUser && !hasCompleteReportAccess()) {
         return alert('Você só pode editar suas próprias entradas.');
     }
     
@@ -1282,7 +1322,7 @@ window.deleteEntry = async function(entryId) {
     const entry = allEntries.find(e => e.id === entryId);
     if (!entry) return alert('Entrada não encontrada.');
     
-    if (entry.server !== currentUser && currentUser !== "Admin") {
+    if (entry.server !== currentUser && !hasCompleteReportAccess()) {
         return alert('Você só pode excluir suas próprias entradas.');
     }
     
@@ -2126,7 +2166,7 @@ function updateFirebaseStatus(status, message) {
 
 function updateRecordCount() {
     const totalRecords = document.getElementById('total-records');
-    if (totalRecords) totalRecords.textContent = `${allEntries.length} registro(s)`;
+    if (totalRecords) totalRecords.textContent = `${getPermittedDatabaseEntries().length} registro(s)`;
 }
 
 function formatDateBR(dateString) { return new Date(dateString + 'T00:00:00').toLocaleDateString('pt-BR'); }
