@@ -58,7 +58,7 @@ const USER_EMAIL_MAPPING = {
   "Lúcia": "lucia@hotmail.com",
   "Andre": "andre@hotmail.com",
   "Matheus": "matheusamanciocosta@hotmail.com",
-  "Admin": "seplan.gluos@valadares.mg.gov.br"
+  "Admin": "seplan.gluos@valadares.mg.gov.br",
   "Teste": "teste@hotmail.com"
 };
 
@@ -67,7 +67,9 @@ const USER_EMAIL_MAPPING = {
 // Adicione aqui os nomes exatos dos usuários que podem ver o Relatório Completo
 // =========================================================================
 const COMPLETE_REPORT_ALLOWED_USERS = [
-  "Teste"
+  "Admin"
+  "Lúcia"
+  "Andre"
 ];
 
 function hasCompleteReportAccess() {
