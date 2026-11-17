@@ -67,8 +67,8 @@ const USER_EMAIL_MAPPING = {
 // Adicione aqui os nomes exatos dos usuários que podem ver o Relatório Completo
 // =========================================================================
 const COMPLETE_REPORT_ALLOWED_USERS = [
-  "Admin"
-  "Lúcia"
+  "Admin",
+  "Lúcia",
   "Andre"
 ];
 
