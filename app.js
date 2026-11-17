@@ -48,23 +48,31 @@ try {
 
 // Mapeamento de usuários para emails
 const USER_EMAIL_MAPPING = {
-  "Pedro": "pedro@hotmail.com",
-  "Rogério": "rogerio@hotmail.com",
-  "Isadora": "isadora@hotmail.com",
-  "Andreza": "andreza@hotmail.com",
-  "Hélica": "helica@hotmail.com",
   "Juliana": "juliana@hotmail.com",
-  "Frederico": "frederico@hotmail.com",
+  "Rogério": "rogerio@hotmail.com",
   "Gabriella": "gabriella@hotmail.com",
   "Renata": "renata@hotmail.com",
   "Ana Luiza": "analuiza@hotmail.com",
   "Maysa": "maysa@hotmail.com",
   "Marcella": "marcella@hotmail.com",
   "Lúcia": "lucia@hotmail.com",
-  "Fernanda": "fernanda@hotmail.com",
   "Andre": "andre@hotmail.com",
+  "Matheus": "matheusamanciocosta@hotmail.com",
   "Admin": "seplan.gluos@valadares.mg.gov.br"
+  "Teste": "teste@hotmail.com"
 };
+
+// =========================================================================
+// CONTROLE DE ACESSO AO RELATÓRIO COMPLETO
+// Adicione aqui os nomes exatos dos usuários que podem ver o Relatório Completo
+// =========================================================================
+const COMPLETE_REPORT_ALLOWED_USERS = [
+  "Teste"
+];
+
+function hasCompleteReportAccess() {
+  return Boolean(currentUser && COMPLETE_REPORT_ALLOWED_USERS.includes(currentUser));
+}
 
 // Função para converter email para nome de usuário
 function emailToUsername(email) {
@@ -78,7 +86,7 @@ function emailToUsername(email) {
 
 // Dados da aplicação
 const GLUOS_DATA = {
-  usuarios: ["Pedro", "Rogério", "Isadora", "Andreza", "Hélica", "Juliana", "Frederico", "Gabriella", "Renata", "Ana Luiza", "Maysa", "Marcella", "Lúcia", "Fernanda", "Andre", "Admin"],
+  usuarios: ["Juliana", "Rogério", "Gabriella", "Renata", "Ana Luiza", "Maysa", "Marcella", "Lúcia", "Andre", "Matheus", "Admin"],
   assuntos: [
     {id: 1, texto: "Deferimento de Processo"},
     {id: 2, texto: "Notificação de processo"},
@@ -87,10 +95,17 @@ const GLUOS_DATA = {
     {id: 5, texto: "Atendimento (RT/Contribuinte)"},
     {id: 6, texto: "Indeferimento de Processo"},
     {id: 7, texto: "Passo (outros setores)"},
-    {id: 8, texto: "Tranferido"},
+    {id: 8, texto: "Transferido"},
     {id: 9, texto: "Visita de vistoria"},
     {id: 10, texto: "Conformidade/Antena"},
     {id: 11, texto: "Declarações"},
+    {id: 12, texto: "Análise de Viabilidade"},
+    {id: 13, texto: "Situação do imóvel"},
+    {id: 14, texto: "Atendimento"},
+    {id: 15, texto: "Atendimento sem processo"},
+    {id: 16, texto: "Passo para Vistoria"},
+    {id: 17, texto: "Encaminhado à Diretoria"},
+    {id: 18, texto: "Encaminhado à Gerência"},
   ]
 };
 
@@ -237,9 +252,7 @@ function setupEventListeners() {
 }
 
 function setupMainNavigation() {
-  const logoutBtn = document.getElementById('logout-btn');
-  if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
-  
+  // Navegação pelos botões do Dashboard
   const navButtons = [
     { id: 'new-entry-btn', screen: 'new-entry' },
     { id: 'bulk-entries-btn', screen: 'bulk-entries' },
@@ -260,18 +273,43 @@ function setupMainNavigation() {
       });
     }
   });
-  
-  const backButtons = [
-    'back-to-dashboard-1', 'back-to-dashboard-3', 
-    'back-to-dashboard-4', 'back-to-dashboard-5',
-    'back-to-dashboard-6', 'back-to-dashboard-7',
-    'back-to-dashboard-prazos'
-  ];
-  
-  backButtons.forEach(btnId => {
-    const btn = document.getElementById(btnId);
-    if (btn) btn.addEventListener('click', () => showScreen('dashboard'));
+
+  // Navegação pelos links da Sidebar (Menu Lateral)
+  document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      const target = this.getAttribute('data-target');
+      if (target) {
+        showScreen(target);
+        if (target === 'database') loadDatabaseTable();
+        if (target === 'prazos') initPrazosScreen();
+      }
+    });
   });
+
+  // Toggle do menu mobile
+  document.querySelectorAll('.mobile-menu-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('sidebar').classList.add('mobile-open');
+    });
+  });
+
+  const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+  if (closeSidebarBtn) {
+    closeSidebarBtn.addEventListener('click', () => {
+      document.getElementById('sidebar').classList.remove('mobile-open');
+    });
+  }
+
+  // Ações do rodapé da Sidebar
+  const sidebarProfileBtn = document.getElementById('sidebar-profile-btn');
+  if (sidebarProfileBtn) sidebarProfileBtn.addEventListener('click', showProfileModal);
+
+  const sidebarLogoutBtn = document.getElementById('sidebar-logout-btn');
+  if (sidebarLogoutBtn) sidebarLogoutBtn.addEventListener('click', handleLogout);
+
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
 }
 
 async function handleLogin(e) {
@@ -310,6 +348,12 @@ async function handleLogin(e) {
     userSelect.value = '';
     passwordInput.value = '';
 
+    // Revela a sidebar e aplica padding ao body
+    document.getElementById('sidebar').classList.remove('hidden');
+    document.body.classList.add('has-sidebar');
+    const sidebarUserName = document.getElementById('sidebar-user-name');
+    if(sidebarUserName) sidebarUserName.textContent = currentUser;
+
     showScreen('dashboard');
 
   } catch (error) {
@@ -336,6 +380,12 @@ function showLoginError(message) {
 function handleLogout() {
   currentUser = null;
   updateUserInfo();
+  
+  // Esconde a sidebar e retira padding
+  document.getElementById('sidebar').classList.add('hidden');
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.body.classList.remove('has-sidebar');
+  
   showScreen('login');
 }
 
@@ -503,10 +553,12 @@ function handleGenerateBulkForms() {
     const container = document.getElementById('bulk-forms-container');
     const subjectText = document.getElementById('bulk-selected-subject-text');
     const processesContainer = document.getElementById('bulk-processes-container');
+    const selectionSection = document.getElementById('bulk-selection-section');
 
     if (container && subjectText && processesContainer && assunto) {
         subjectText.textContent = assunto.texto;
         container.classList.remove('hidden');
+        if (selectionSection) selectionSection.classList.add('hidden');
         processesContainer.innerHTML = '';
 
         for (let i = 1; i <= quantity; i++) {
@@ -725,8 +777,10 @@ async function handleSaveAllBulkEntries() {
 function handleResetBulkForms() {
     const container = document.getElementById('bulk-forms-container');
     const processesContainer = document.getElementById('bulk-processes-container');
-
+    const selectionSection = document.getElementById('bulk-selection-section'); 
+    
     if (container) container.classList.add('hidden');
+    if (selectionSection) selectionSection.classList.remove('hidden'); 
     if (processesContainer) processesContainer.innerHTML = '';
 
     document.getElementById('bulk-subject-number').value = '';
@@ -985,7 +1039,7 @@ function displaySearchResults(entries) {
                 <td>${entry.contributor || '-'}</td>
                 <td>${entry.ctm || '-'}</td>
                 <td>${entry.prazo || '-'}</td>
-                <td title="${entry.observation || '-'}">${truncateText(entry.observation || '-', 40)}</td>
+                <td class="obs-cell">${entry.observation || '-'}</td>
             `;
             tableBody.appendChild(row);
         });
@@ -1067,7 +1121,7 @@ function displayCurrentPage() {
 
     pageEntries.forEach(entry => {
         const row = document.createElement('tr');
-        const canEdit = entry.server === currentUser;
+        const canEdit = entry.server === currentUser || currentUser === "Admin";
         const actionsHtml = canEdit ? `
             <div class="action-buttons">
                 <button class="btn--edit" onclick="editEntry('${entry.id}')">Editar</button>
@@ -1214,14 +1268,21 @@ function setupPaginationEventListeners() {
 window.editEntry = function(entryId) {
     const entry = allEntries.find(e => e.id === entryId);
     if (!entry) return alert('Entrada não encontrada.');
-    if (entry.server !== currentUser) return alert('Você só pode editar suas próprias entradas.');
+    
+    if (entry.server !== currentUser && currentUser !== "Admin") {
+        return alert('Você só pode editar suas próprias entradas.');
+    }
+    
     showEditModal(entry);
 };
 
 window.deleteEntry = async function(entryId) {
     const entry = allEntries.find(e => e.id === entryId);
     if (!entry) return alert('Entrada não encontrada.');
-    if (entry.server !== currentUser) return alert('Você só pode excluir suas próprias entradas.');
+    
+    if (entry.server !== currentUser && currentUser !== "Admin") {
+        return alert('Você só pode excluir suas próprias entradas.');
+    }
     
     if (!confirm('Tem certeza que deseja excluir esta entrada?')) return;
     
@@ -1243,16 +1304,33 @@ window.deleteEntry = async function(entryId) {
 function setupReports() {
     const personalBtn = document.getElementById('personal-report-btn');
     const completeBtn = document.getElementById('complete-report-btn');
+    const subjectBtn = document.getElementById('subject-report-btn');
     const generateBtn = document.getElementById('generate-report-btn');
+    const printCompleteBtn = document.getElementById('print-complete-report-btn');
     
     if (personalBtn) personalBtn.addEventListener('click', () => { currentReportType = 'personal'; showReportForm('Relatório Pessoal'); });
-    if (completeBtn) completeBtn.addEventListener('click', () => { currentReportType = 'complete'; showReportForm('Relatório Completo'); });
+    if (completeBtn) {
+        completeBtn.addEventListener('click', () => {
+            if (!hasCompleteReportAccess()) {
+                alert('Você não tem permissão para acessar o Relatório Completo.');
+                return;
+            }
+            currentReportType = 'complete';
+            showReportForm('Relatório Completo');
+        });
+    }
+    if (subjectBtn) subjectBtn.addEventListener('click', () => { currentReportType = 'subject'; showReportForm('Relatórios por Assunto'); });
     if (generateBtn) generateBtn.addEventListener('click', handleGenerateReport);
+    setupSubjectReportModal();
+    if (printCompleteBtn) printCompleteBtn.addEventListener('click', printCompleteReportTable);
 }
 
 function showReportForm(title) {
     const form = document.getElementById('report-form');
     const formTitle = document.getElementById('report-form-title');
+    const printActions = document.getElementById('report-print-actions');
+
+    if (printActions) printActions.classList.add('hidden');
     
     if (form && formTitle) {
         formTitle.textContent = title;
@@ -1272,6 +1350,10 @@ async function handleGenerateReport() {
     
     if (!startDate || !endDate) return alert('Selecione as datas inicial e final.');
     if (new Date(startDate) > new Date(endDate)) return alert('A data inicial não pode ser maior que a data final.');
+
+    if (currentReportType === 'complete' && !hasCompleteReportAccess()) {
+        return alert('Você não tem permissão para gerar o Relatório Completo.');
+    }
     
     const generateBtn = document.getElementById('generate-report-btn');
     setButtonLoading(generateBtn, true);
@@ -1279,6 +1361,7 @@ async function handleGenerateReport() {
     try {
         if (currentReportType === 'personal') generatePersonalReport(startDate, endDate);
         else if (currentReportType === 'complete') generateCompleteReport(startDate, endDate);
+        else if (currentReportType === 'subject') generateSubjectReport(startDate, endDate);
     } catch (error) {
         alert('Erro ao gerar relatório. Tente novamente.');
     } finally {
@@ -1351,10 +1434,16 @@ function displayPersonalReport(reportData, totalEntries, startDate, endDate) {
         document.getElementById('report-summary').classList.add('hidden');
     }
     
+    const printActions = document.getElementById('report-print-actions');
+    if (printActions) printActions.classList.add('hidden');
+
     document.getElementById('report-results').classList.remove('hidden');
+    setupReportTableSorting();
 }
 
 function generateCompleteReport(startDate, endDate) {
+    if (!hasCompleteReportAccess()) return;
+
     const usersWithoutAdmin = GLUOS_DATA.usuarios.filter(user => user !== "Admin");
     const startTimestamp = new Date(startDate + 'T00:00:00').getTime();
     const endTimestamp = new Date(endDate + 'T23:59:59').getTime();
@@ -1439,11 +1528,348 @@ function displayCompleteReport(reportData, userTotals, grandTotal, startDate, en
     
     const reportTable = document.getElementById('report-table');
     if (reportTable) reportTable.classList.add('admin-report-table');
+
+    const printActions = document.getElementById('report-print-actions');
+    if (printActions) printActions.classList.remove('hidden');
     
     document.getElementById('report-results').classList.remove('hidden');
     document.getElementById('report-summary').classList.add('hidden');
+    setupReportTableSorting();
 }
 
+function printCompleteReportTable() {
+    const reportTable = document.getElementById('report-table');
+
+    if (!reportTable || currentReportType !== 'complete') {
+        alert('Gere primeiro um Relatório Completo para imprimir.');
+        return;
+    }
+
+    const tableClone = reportTable.cloneNode(true);
+    tableClone.removeAttribute('id');
+    tableClone.className = 'print-report-table';
+    tableClone.querySelectorAll('.report-sort-button').forEach(button => button.replaceWith(button.textContent));
+
+    tableClone.querySelectorAll('th, td').forEach(cell => {
+        cell.style.minWidth = '';
+        cell.style.maxWidth = '';
+        cell.style.width = '';
+        cell.style.wordWrap = '';
+    });
+
+    const printWindow = window.open('', '_blank', 'width=1400,height=900');
+
+    if (!printWindow) {
+        alert('Não foi possível abrir a janela de impressão. Permita pop-ups para este sistema e tente novamente.');
+        return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+            <meta charset="UTF-8">
+            <title>Relatório Completo - Impressão</title>
+            <style>
+                @page {
+                    size: A4 landscape;
+                    margin: 7mm;
+                }
+
+                * {
+                    box-sizing: border-box;
+                }
+
+                html, body {
+                    margin: 0;
+                    padding: 0;
+                    background: #ffffff;
+                    color: #000000;
+                    font-family: Arial, Helvetica, sans-serif;
+                }
+
+                .print-area {
+                    width: 100%;
+                }
+
+                .print-report-table {
+                    width: 100% !important;
+                    min-width: 0 !important;
+                    max-width: 100% !important;
+                    border-collapse: collapse;
+                    table-layout: fixed;
+                    font-size: 7.2pt;
+                }
+
+                .print-report-table th,
+                .print-report-table td {
+                    border: 0.2mm solid #555555;
+                    padding: 1.2mm 0.7mm;
+                    line-height: 1.15;
+                    vertical-align: middle;
+                    white-space: normal !important;
+                    overflow-wrap: anywhere;
+                    word-break: normal;
+                }
+
+                .print-report-table thead th {
+                    background: #e9ecef !important;
+                    font-weight: 700;
+                }
+
+                .print-report-table th:first-child,
+                .print-report-table td:first-child {
+                    width: 28%;
+                    text-align: left !important;
+                }
+
+                .print-report-table th:not(:first-child),
+                .print-report-table td:not(:first-child) {
+                    text-align: center !important;
+                }
+
+                .print-report-table tfoot th,
+                .print-report-table tfoot td {
+                    background: #f2f2f2 !important;
+                    font-weight: 700 !important;
+                    border-top: 0.4mm solid #000000;
+                }
+
+                .print-report-table thead {
+                    display: table-header-group;
+                }
+
+                .print-report-table tfoot {
+                    display: table-footer-group;
+                }
+
+                .print-report-table tr {
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="print-area">${tableClone.outerHTML}</div>
+            <script>
+                window.onload = function() {
+                    window.onafterprint = function() { window.close(); };
+                    window.focus();
+                    setTimeout(function() { window.print(); }, 200);
+                };
+            <\/script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+
+
+// Ordenação compartilhada pelos relatórios pessoal, completo e por assunto.
+function setupReportTableSorting() {
+    const table = document.getElementById('report-table');
+    if (!table) return;
+    const headers = [...table.tHead.rows[0].cells];
+    const collator = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
+    headers.forEach((header, columnIndex) => {
+        const label = header.textContent.trim();
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'report-sort-button';
+        button.textContent = label;
+        button.title = `Ordenar por ${label}: crescente ou decrescente`;
+        header.replaceChildren(button);
+        header.setAttribute('aria-sort', 'none');
+        header.addEventListener('click', () => {
+            const ascending = header.getAttribute('aria-sort') !== 'ascending';
+            headers.forEach(other => other.setAttribute('aria-sort', 'none'));
+            header.setAttribute('aria-sort', ascending ? 'ascending' : 'descending');
+            const rows = [...table.tBodies[0].rows].filter(row => row.cells.length === headers.length);
+            const sortValue = cell => {
+                if (cell.dataset.sortValue !== undefined) return Number(cell.dataset.sortValue);
+                const value = cell.textContent.trim().replace('%', '').replace(',', '.');
+                return Number(value);
+            };
+            rows.sort((a, b) => {
+                const first = a.cells[columnIndex];
+                const second = b.cells[columnIndex];
+                const result = columnIndex === 0
+                    ? collator.compare(first.textContent.trim(), second.textContent.trim())
+                    : sortValue(first) - sortValue(second);
+                return ascending ? result : -result;
+            });
+            rows.forEach(row => table.tBodies[0].appendChild(row));
+        });
+    });
+}
+
+// Datas cadastradas são normalizadas sem converter uma data civil para UTC.
+function getSubjectReportDate(entry) {
+    const stored = String(entry.date || '').trim();
+    let match = stored.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (match) return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+    match = stored.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+    if (entry.timestamp == null || entry.timestamp === '') return null;
+    const date = new Date(Number(entry.timestamp));
+    if (!Number.isFinite(date.getTime())) return null;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function collectSubjectReportEntries(startDate, endDate) {
+    return allEntries.map(entry => ({ entry, date: getSubjectReportDate(entry) }))
+        .filter(item => item.date && item.date >= startDate && item.date <= endDate);
+}
+
+function calculateSubjectReport(startDate, endDate) {
+    const entries = collectSubjectReportEntries(startDate, endDate);
+    const days = new Set(entries.map(item => item.date)).size;
+    const subjects = new Map(GLUOS_DATA.assuntos.map(subject => [String(subject.id), {
+        id: String(subject.id), text: subject.texto, count: 0
+    }]));
+    entries.forEach(({ entry }) => {
+        const id = String(entry.subjectId ?? 'sem-assunto');
+        if (!subjects.has(id)) subjects.set(id, { id, text: entry.subjectText || `Assunto ${id}`, count: 0 });
+        subjects.get(id).count++;
+    });
+    const total = entries.length;
+    const rows = [...subjects.values()].map(subject => ({
+        ...subject, days,
+        average: days > 0 ? subject.count / days : 0,
+        percentage: total > 0 ? subject.count / total * 100 : 0
+    })).sort((a, b) => b.count - a.count);
+    return { rows, total, days, average: rows.reduce((sum, row) => sum + row.average, 0) };
+}
+
+function formatSubjectReportNumber(value) {
+    return value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function generateSubjectReport(startDate, endDate) {
+    const data = calculateSubjectReport(startDate, endDate);
+    document.getElementById('report-title').textContent = 'Relatórios por Assunto';
+    document.getElementById('report-meta').innerHTML = `
+        <p><strong>Período:</strong> ${formatDateBR(startDate)} a ${formatDateBR(endDate)}</p>
+        <p><strong>Total de Entradas:</strong> ${data.total}</p>
+        <p><strong>Dias úteis:</strong> ${data.days} datas com entradas na base.</p>
+        <p>Clique em um assunto para consultar os dados mensais por ano.</p>`;
+    document.getElementById('report-table').classList.remove('admin-report-table');
+    document.getElementById('report-table-head').innerHTML = '<tr><th>Assunto</th><th>Total</th><th>Dias úteis</th><th>Média</th><th>%</th></tr>';
+    const body = document.getElementById('report-table-body');
+    body.replaceChildren();
+    data.rows.forEach(subject => {
+        const row = document.createElement('tr');
+        row.className = 'subject-report-row';
+        const nameCell = document.createElement('td');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'subject-report-link';
+        button.textContent = subject.text;
+        button.title = 'Ver relatório mensal deste assunto';
+        nameCell.appendChild(button);
+        row.appendChild(nameCell);
+        [subject.count, subject.days, subject.average, subject.percentage].forEach((value, index) => {
+            const cell = document.createElement('td');
+            cell.dataset.sortValue = String(value);
+            cell.textContent = index < 2 ? String(value) : `${formatSubjectReportNumber(value)}${index === 3 ? '%' : ''}`;
+            row.appendChild(cell);
+        });
+        row.addEventListener('click', () => showSubjectReportModal(subject, endDate, button));
+        body.appendChild(row);
+    });
+    document.getElementById('report-table-foot').innerHTML = `<tr><th>TOTAL GERAL</th><th>${data.total}</th><th>${data.days}</th><th>${formatSubjectReportNumber(data.average)}</th><th>${data.total > 0 ? '100,00' : '0,00'}%</th></tr>`;
+    const printActions = document.getElementById('report-print-actions');
+    if (printActions) printActions.classList.add('hidden');
+    document.getElementById('report-summary').classList.add('hidden');
+    document.getElementById('report-results').classList.remove('hidden');
+    setupReportTableSorting();
+}
+
+let activeSubjectReport = null;
+let subjectReportReturnFocus = null;
+
+function calculateSubjectMonthlyReport(subjectId, year) {
+    const entries = collectSubjectReportEntries(`${year}-01-01`, `${year}-12-31`);
+    const months = Array.from({ length: 12 }, () => ({ count: 0, dates: new Set() }));
+    entries.forEach(({ entry, date }) => {
+        const month = months[Number(date.slice(5, 7)) - 1];
+        if (!month) return;
+        month.dates.add(date);
+        if (String(entry.subjectId ?? 'sem-assunto') === String(subjectId)) month.count++;
+    });
+    const rows = months.map(month => ({
+        count: month.count, days: month.dates.size,
+        average: month.dates.size > 0 ? month.count / month.dates.size : 0
+    }));
+    const total = rows.reduce((sum, month) => sum + month.count, 0);
+    const days = rows.reduce((sum, month) => sum + month.days, 0);
+    return { rows, total, days, average: days > 0 ? total / days : 0 };
+}
+
+function showSubjectReportModal(subject, endDate, returnFocus) {
+    activeSubjectReport = subject;
+    subjectReportReturnFocus = returnFocus;
+    document.getElementById('subject-report-modal-title').textContent = subject.text;
+    const select = document.getElementById('subject-report-year');
+    const selectedYear = Number(endDate.slice(0, 4));
+    const years = new Set([selectedYear, new Date().getFullYear()]);
+    allEntries.forEach(entry => {
+        const date = getSubjectReportDate(entry);
+        if (date) years.add(Number(date.slice(0, 4)));
+    });
+    select.replaceChildren();
+    [...years].sort((a, b) => b - a).forEach(year => {
+        const option = document.createElement('option');
+        option.value = String(year);
+        option.textContent = String(year);
+        select.appendChild(option);
+    });
+    select.value = String(selectedYear);
+    renderSubjectMonthlyReport();
+    document.getElementById('subject-report-modal').classList.remove('hidden');
+    select.focus();
+}
+
+function renderSubjectMonthlyReport() {
+    if (!activeSubjectReport) return;
+    const year = Number(document.getElementById('subject-report-year').value);
+    const data = calculateSubjectMonthlyReport(activeSubjectReport.id, year);
+    const names = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    document.getElementById('subject-monthly-body').innerHTML = data.rows.map((month, index) =>
+        `<tr><td>${names[index]}</td><td>${month.count}</td><td>${month.days}</td><td>${formatSubjectReportNumber(month.average)}</td></tr>`
+    ).join('');
+    document.getElementById('subject-monthly-foot').innerHTML = `<tr><th>TOTAL ANO</th><th>${data.total}</th><th>${data.days}</th><th>${formatSubjectReportNumber(data.average)}</th></tr>`;
+}
+
+function hideSubjectReportModal() {
+    document.getElementById('subject-report-modal').classList.add('hidden');
+    if (subjectReportReturnFocus?.isConnected) subjectReportReturnFocus.focus();
+}
+
+function setupSubjectReportModal() {
+    const modal = document.getElementById('subject-report-modal');
+    if (!modal) return;
+    document.getElementById('subject-report-year').addEventListener('change', renderSubjectMonthlyReport);
+    document.getElementById('close-subject-report-modal').addEventListener('click', hideSubjectReportModal);
+    modal.addEventListener('click', event => {
+        if (event.target === modal) hideSubjectReportModal();
+    });
+    modal.addEventListener('keydown', event => {
+        if (event.key === 'Escape') hideSubjectReportModal();
+        if (event.key === 'Tab') {
+            const select = document.getElementById('subject-report-year');
+            const close = document.getElementById('close-subject-report-modal');
+            if (event.shiftKey && document.activeElement === select) {
+                event.preventDefault();
+                close.focus();
+            } else if (!event.shiftKey && document.activeElement === close) {
+                event.preventDefault();
+                select.focus();
+            }
+        }
+    });
+}
 
 // Perfil e Modais
 function setupProfile() {
@@ -1636,16 +2062,42 @@ function showScreen(screenName) {
         if (screenName === 'report') {
             const reportForm = document.getElementById('report-form');
             const reportResults = document.getElementById('report-results');
+            const printActions = document.getElementById('report-print-actions');
+            const completeReportBtn = document.getElementById('complete-report-btn');
+
             if (reportForm) reportForm.classList.add('hidden');
             if (reportResults) reportResults.classList.add('hidden');
+            if (printActions) printActions.classList.add('hidden');
+            if (completeReportBtn) {
+                completeReportBtn.classList.toggle('hidden', !hasCompleteReportAccess());
+            }
             currentReportType = null;
         }
     }
+
+    // Atualiza o link ativo da Sidebar
+    document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+    const activeLink = document.querySelector(`.nav-link[data-target="${screenName}"]`);
+    if (activeLink) activeLink.classList.add('active');
+
+    // Esconde o menu no mobile ao clicar em um link
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) sidebar.classList.remove('mobile-open');
 }
 
 function updateUserInfo() {
     const userInfo = document.getElementById('user-info');
     if (userInfo) userInfo.textContent = currentUser ? `Usuário: ${currentUser}` : 'Bem-vindo!';
+
+    // Controla a visibilidade do botão de Relatório Completo conforme permissão
+    const completeReportBtn = document.getElementById('complete-report-btn');
+    if (completeReportBtn) {
+        if (hasCompleteReportAccess()) {
+            completeReportBtn.classList.remove('hidden');
+        } else {
+            completeReportBtn.classList.add('hidden');
+        }
+    }
 }
 
 function updateDateTime() {
@@ -1715,7 +2167,6 @@ function initPrazosScreen() {
 
 function calculatePrazos() {
     const processosMap = new Map();
-    // Agrupa todas as entradas pelo numero do processo
     allEntries.forEach(entry => {
         if(!processosMap.has(entry.processNumber)) processosMap.set(entry.processNumber, []);
         processosMap.get(entry.processNumber).push(entry);
@@ -1725,24 +2176,19 @@ function calculatePrazos() {
     const now = new Date();
 
     processosMap.forEach((entries, processNumber) => {
-        // Ordena por data (cronológico)
         entries.sort((a, b) => a.timestamp - b.timestamp);
         
-        // Encontra notificações do processo
-        const notificacoes = entries.filter(e => e.subjectId === 2); // 2 = Notificação de processo
+        const notificacoes = entries.filter(e => e.subjectId === 2);
         if (notificacoes.length === 0) return;
 
-        // Pega a última notificação
         const lastNotificacao = notificacoes[notificacoes.length - 1];
         
-        // Verifica se há deferimento (1) ou indeferimento (6) depois desta notificação
         const hasFinalizationAfter = entries.some(e => 
             (e.subjectId === 1 || e.subjectId === 6) && e.timestamp > lastNotificacao.timestamp
         );
         
         if (hasFinalizationAfter) return;
 
-        // Calcula o prazo em dias (se não foi preenchido, usa 90 por padrão)
         const prazoDias = lastNotificacao.prazo ? parseInt(lastNotificacao.prazo) : 90;
         
         const [day, month, year] = lastNotificacao.date.split('/');
@@ -1751,11 +2197,9 @@ function calculatePrazos() {
         const diaFinal = new Date(notifDate);
         diaFinal.setDate(diaFinal.getDate() + prazoDias);
 
-        // Calcula os dias passados desde a data final calculada
         const diffTime = now.getTime() - diaFinal.getTime();
         const diasFim = Math.floor(diffTime / (1000 * 3600 * 24));
 
-        // Só considera vencido/atrasado se passou do dia
         if (diasFim > 0) {
             allOverdueList.push({
                 ...lastNotificacao,
@@ -1806,7 +2250,6 @@ function sortPrazosData() {
         let valA = a[currentPrazosSort.column];
         let valB = b[currentPrazosSort.column];
 
-        // Lidar com campos de data/número nativos de forma apropriada
         if (currentPrazosSort.column === 'diaFinal') {
             valA = a.diaFinalObj.getTime();
             valB = b.diaFinalObj.getTime();
